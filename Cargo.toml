@@ -2,5 +2,7 @@
 name = "token_store"
 version = "0.1.0"
 authors = ["Victor Berger <victor.berger@m4x.org>"]
-
-[dependencies]
+documentation = "https://docs.rs/token_store"
+repository = "https://github.com/vberger/token_store"
+license = "MIT"
+description = "A token-based store for arbitrary values"
