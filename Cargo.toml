@@ -1,0 +1,6 @@
+[package]
+name = "token_store"
+version = "0.1.0"
+authors = ["Victor Berger <victor.berger@m4x.org>"]
+
+[dependencies]
