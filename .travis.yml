@@ -23,13 +23,17 @@ before_script:
     if [ $TRAVIS_RUST_VERSION = "nightly" ]; then
       cargo install rustfmt-nightly --force
     fi
-  - which cargo-tarpaulin || cargo install cargo-tarpaulin
-  - which cargo-install-update || cargo install cargo-update
-  - cargo install-update -a
+  - if [ $TRAVIS_RUST_VERSION -ne "1.0.0" ]; then
+      which cargo-tarpaulin || cargo install cargo-tarpaulin;
+      which cargo-install-update || cargo install cargo-update;
+      cargo install-update -a;
+    fi
 
 script:
   - cargo test
-  - cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
+  - if [ $TRAVIS_RUST_VERSION -ne "1.0.0" ]; then
+      cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID;
+    fi
   - cargo doc --no-deps
 
 after_success:
