@@ -29,6 +29,11 @@ impl<V> Clone for Token<V> {
 }
 
 impl Store {
+    /// Create a new store
+    pub fn new() -> Store {
+        Store { values: Vec::new() }
+    }
+
     /// Insert a new value in this store
     ///
     /// Returns a clonable token that you can later use to access this
@@ -96,5 +101,49 @@ impl Store {
         let (boxed, live) = self.values[token.id].take().unwrap();
         live.set(false);
         *boxed.downcast().unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn insert_and_retrieve() {
+        let mut store = Store::new();
+        let token1 = store.insert(42);
+        let token2 = store.insert("I like trains".to_owned());
+        assert_eq!(*store.get(&token1), 42);
+        assert_eq!(store.get(&token2), "I like trains");
+    }
+
+    #[test]
+    fn mutate() {
+        let mut store = Store::new();
+        let token = store.insert(42);
+        {
+            let v = store.get_mut(&token);
+            *v += 5;
+        }
+        assert_eq!(*store.get(&token), 47);
+    }
+
+    #[test]
+    #[should_panic]
+    fn no_access_removed() {
+        let mut store = Store::new();
+        let token = store.insert(42);
+        let token2 = token.clone();
+        store.remove(token2);
+        let _v = store.get(&token);
+    }
+
+    #[test]
+    fn place_reuse() {
+        let mut store = Store::new();
+        let token = store.insert(42);
+        store.remove(token);
+        let token = store.insert("I like trains");
+        assert_eq!(store.values.len(), 1);
+        assert_eq!(*store.get(&token), "I like trains");
     }
 }
