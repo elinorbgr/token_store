@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::cell::Cell;
-use std::rc::Rc;
 use std::marker::PhantomData;
+use std::rc::Rc;
 
 /// A token store
 ///
