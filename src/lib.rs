@@ -138,6 +138,27 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn no_mut_access_removed() {
+        let mut store = Store::new();
+        let token = store.insert(42);
+        let token2 = token.clone();
+        store.remove(token2);
+        let _v = store.get_mut(&token);
+    }
+
+    #[test]
+    #[should_panic]
+    fn no_double_remove() {
+        let mut store = Store::new();
+        let token = store.insert(42);
+        let token2 = token.clone();
+        store.remove(token2);
+        store.remove(token);
+    }
+
+
+    #[test]
     fn place_reuse() {
         let mut store = Store::new();
         let token = store.insert(42);
