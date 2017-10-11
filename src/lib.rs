@@ -269,4 +269,46 @@ mod tests {
         assert_eq!(len, 26);
         assert_eq!(store.get(&token1), "I like trains: 104 = 104.5");
     }
+
+    #[test]
+    #[should_panic]
+    fn no_double_with_value() {
+        let mut store = Store::new();
+        let token = store.insert(42);
+        store.with_value(&token, |proxy, _| {
+            proxy.with_value(&token, |_, _| {
+            });
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn no_alias_get_and_with_value() {
+        let mut store = Store::new();
+        let token = store.insert(42);
+        store.with_value(&token, |proxy, _| {
+            let _v = proxy.get(&token);
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn no_alias_get_mut_and_with_value() {
+        let mut store = Store::new();
+        let token = store.insert(42);
+        store.with_value(&token, |proxy, _| {
+            let _v = proxy.get_mut(&token);
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn no_alias_remove_and_with_value() {
+        let mut store = Store::new();
+        let token = store.insert(42);
+        store.with_value(&token, |proxy, _| {
+            let _v = proxy.remove(token.clone());
+        });
+    }
+
 }
