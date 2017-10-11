@@ -1,3 +1,41 @@
+//! # Token Store
+//!
+//! This crate provides a small abstraction of a type allowing
+//! you to stroe values of arbitrary types and retrieving them
+//! using tokens values that are cheap to move around and clone.
+//!
+//! The typical use-case is a data store shared by large portions
+//! of an application requiring sequential access to parts of this
+//! store, but while not caring nor being able to know what else
+//! is stored in it.
+//!
+//! ## How to use it
+//!
+//! ```
+//! # extern crate token_store;
+//! use token_store::Store;
+//!
+//! # fn main(){
+//! // create a store
+//! let mut store = Store::new();
+//!
+//! // insert some things in it, you are given tokens
+//! let token1 = store.insert(42);
+//! // you can store any type as log as it is `Any + 'static`
+//! let token2 = store.insert(String::from("I like trains"));
+//! // the tokens keep the information of the store type,
+//! // as such you don't need any annotation to retrieve a value:
+//! store.get_mut(&token2).push_str(", and cars too!");
+//! # }
+//! ```
+//!
+//! The retrieved tokens can be cloned and shared as you like between various
+//! parts of your code.
+//!
+//! Note however that, as it is possible to store `!Send` types in the `token_store`,
+//! neither the store nor its tokens can be shared accross threads.
+#![warn(missing_docs)]
+
 use std::any::Any;
 use std::cell::Cell;
 use std::marker::PhantomData;
@@ -103,6 +141,20 @@ impl Store {
         *boxed.downcast().unwrap()
     }
 
+    /// Create a sub-scope with access to a value
+    ///
+    /// In the closure you provide, the value represented by `token`
+    /// will be available as an argument, as well as a `StoreProxy`,
+    /// which allows you to manipulate the other values of the store
+    /// while this one is mutably borrowed.
+    ///
+    /// Attempting to access again the same value from its token from
+    /// within this closure is forbidden, and attempting to do so will
+    /// result in a panic.
+    ///
+    /// The `StoreProxy` provides the same access methods as the `Store`,
+    /// including `with_value`, allowing you to create nested sub-scopes
+    /// accessing multiple store values at the same time.
     pub fn with_value<V: Any + 'static, T, F>(&mut self, token: &Token<V>, f: F) -> T
     where
         F: FnOnce(&mut StoreProxy, &mut V) -> T,
@@ -110,7 +162,11 @@ impl Store {
         self.as_proxy().with_value(token, f)
     }
 
-
+    /// See this `Store` as a `StoreProxy` with no ongoing borrow
+    ///
+    /// This can be usefull for code requiering access to a store,
+    /// but wanting to be generic over being called from a value
+    /// scope or not.
     pub fn as_proxy<'a>(&'a mut self) -> StoreProxy<'a> {
         StoreProxy {
             store: self,
@@ -119,6 +175,14 @@ impl Store {
     }
 }
 
+/// A Proxy representing a `Store` with ongoing borrows
+///
+/// This struct represents a handle to a store from which
+/// some values are already mutably borrowed, and as such
+/// cannot be touched.
+///
+/// See `Store::with_value` for detailed explanation of its
+/// use.
 pub struct StoreProxy<'store> {
     store: &'store mut Store,
     borrowed: Vec<usize>,
@@ -158,7 +222,7 @@ impl<'store> StoreProxy<'store> {
     /// Remove a value previously inserted in the proxified store
     ///
     /// Panics if the provided token corresponds to a value that was already
-    /// removed.
+    /// removed, or if this value is already borrowed.
     pub fn remove<V: Any + 'static>(&mut self, token: Token<V>) -> V {
         if self.borrowed.contains(&token.id) {
             panic!("Attempted to remove a value from the Store while it was borrowed!");
@@ -166,6 +230,12 @@ impl<'store> StoreProxy<'store> {
         self.store.remove(token)
     }
 
+    /// Create a sub-scope with access to a value
+    ///
+    /// Panics if the provided token corresponds to a value that was removed, or
+    /// if this value is already borrowed.
+    ///
+    /// See `Store::with_value` for full documentation.
     pub fn with_value<V: Any + 'static, T, F>(&mut self, token: &Token<V>, f: F) -> T
     where
         F: FnOnce(&mut StoreProxy, &mut V) -> T,
