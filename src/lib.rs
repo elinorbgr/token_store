@@ -228,11 +228,14 @@ impl<'a> ::std::convert::From<&'a mut Store> for StoreProxy<'a> {
     }
 }
 
-impl<'a, 'b> ::std::convert::From<&'a mut StoreProxy<'b>> for StoreProxy<'a> where 'b: 'a {
+impl<'a, 'b> ::std::convert::From<&'a mut StoreProxy<'b>> for StoreProxy<'a>
+where
+    'b: 'a,
+{
     fn from(proxy: &'a mut StoreProxy<'b>) -> StoreProxy<'a> {
         StoreProxy {
             store: proxy.store,
-            borrowed: proxy.borrowed.clone()
+            borrowed: proxy.borrowed.clone(),
         }
     }
 }
@@ -451,9 +454,7 @@ mod tests {
 
         let mut store = Store::new();
         let token1 = insert_42(&mut store);
-        let token2 = store.with_value(&token1, |proxy, _| {
-            insert_42(proxy)
-        });
+        let token2 = store.with_value(&token1, |proxy, _| insert_42(proxy));
         assert_eq!(*store.get(&token1), 42);
         assert_eq!(*store.get(&token2), 42);
     }
