@@ -37,6 +37,7 @@
 #![warn(missing_docs)]
 
 use std::any::Any;
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -167,10 +168,28 @@ impl Store {
     /// This can be usefull for code requiering access to a store,
     /// but wanting to be generic over being called from a value
     /// scope or not.
+    ///
+    /// You can also use the `From` and `Into` traits to perform
+    /// this conversion.
     pub fn as_proxy<'a>(&'a mut self) -> StoreProxy<'a> {
         StoreProxy {
             store: self,
-            borrowed: Vec::new(),
+            borrowed: Cow::Owned(Vec::new()),
+        }
+    }
+}
+
+impl<'a> ::std::convert::From<&'a mut Store> for StoreProxy<'a> {
+    fn from(store: &'a mut Store) -> StoreProxy<'a> {
+        store.as_proxy()
+    }
+}
+
+impl<'a, 'b> ::std::convert::From<&'a mut StoreProxy<'b>> for StoreProxy<'a> where 'b: 'a {
+    fn from(proxy: &'a mut StoreProxy<'b>) -> StoreProxy<'a> {
+        StoreProxy {
+            store: proxy.store,
+            borrowed: proxy.borrowed.clone()
         }
     }
 }
@@ -185,7 +204,7 @@ impl Store {
 /// use.
 pub struct StoreProxy<'store> {
     store: &'store mut Store,
-    borrowed: Vec<usize>,
+    borrowed: Cow<'store, [usize]>,
 }
 
 impl<'store> StoreProxy<'store> {
@@ -248,9 +267,9 @@ impl<'store> StoreProxy<'store> {
         let mut deeper_proxy = StoreProxy {
             store: &mut *self.store,
             borrowed: {
-                let mut my_borrowed = self.borrowed.clone();
+                let mut my_borrowed = self.borrowed.clone().into_owned();
                 my_borrowed.push(token.id);
-                my_borrowed
+                Cow::Owned(my_borrowed)
             },
         };
         f(&mut deeper_proxy, value)
@@ -346,8 +365,7 @@ mod tests {
         let mut store = Store::new();
         let token = store.insert(42);
         store.with_value(&token, |proxy, _| {
-            proxy.with_value(&token, |_, _| {
-            });
+            proxy.with_value(&token, |_, _| {});
         });
     }
 
@@ -379,6 +397,22 @@ mod tests {
         store.with_value(&token, |proxy, _| {
             let _v = proxy.remove(token.clone());
         });
+    }
+
+    #[test]
+    fn generic_into_store_proxy() {
+        fn insert_42<'a, S: Into<StoreProxy<'a>>>(s: S) -> Token<i32> {
+            let mut proxy = s.into();
+            proxy.insert(42)
+        }
+
+        let mut store = Store::new();
+        let token1 = insert_42(&mut store);
+        let token2 = store.with_value(&token1, |proxy, _| {
+            insert_42(proxy)
+        });
+        assert_eq!(*store.get(&token1), 42);
+        assert_eq!(*store.get(&token2), 42);
     }
 
 }
