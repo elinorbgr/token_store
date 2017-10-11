@@ -34,6 +34,49 @@
 //!
 //! Note however that, as it is possible to store `!Send` types in the `token_store`,
 //! neither the store nor its tokens can be shared accross threads.
+//!
+//! ## Value scopes and genericity
+//!
+//! It is also possible to access simultaneously several values of the store using
+//! a scoped access:
+//!
+//! ```
+//! # extern crate token_store;
+//! # use token_store::{Store, StoreProxy};
+//! # fn main() {
+//! let mut store = Store::new();
+//! let token = store.insert(42);
+//! store.with_value(&token, |proxy, value| {
+//!     // Here, proxy is a `StoreProxy`, it allows you to to all you want with the
+//!     // store, as long as you do not try to access again the value guarded by
+//!     // the token provided to `with_value`.
+//!     // Also, value is a mutable reference to the value guarded by this token.
+//!
+//!     // You can nest calls to `with_value` to access several values simultaneously
+//!     let token2 = proxy.insert(String::new());
+//!     proxy.with_value(&token2, |proxy, value2| {
+//!         // Here you can access value, value2, as well as a proxy tracking that
+//!         // both values are borrowed
+//!     });
+//! });
+//! # }
+//! ```
+//!
+//! Two implementations of the `From` trait are also provided, allowing you to convert
+//! both a `&mut Store` and a `&mut StoreProxy` into a `StoreProxy`. This is to help
+//! generic code like this:
+//!
+//! ```
+//! # extern crate token_store;
+//! # use token_store::{Store, StoreProxy};
+//! # fn main() {}
+//! fn do_stuff<'store, S: Into<StoreProxy<'store>>>(s: S) {
+//!     let proxy = s.into();
+//!     // we now have a store proxy, and can do our stuff with it
+//!     // and the caller can call us directly with a `&mut Store` or
+//!     // from within a value scope.
+//! }
+//! ```
 #![warn(missing_docs)]
 
 use std::any::Any;
