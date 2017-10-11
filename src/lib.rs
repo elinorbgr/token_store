@@ -102,6 +102,89 @@ impl Store {
         live.set(false);
         *boxed.downcast().unwrap()
     }
+
+    pub fn with_value<V: Any + 'static, T, F>(&mut self, token: &Token<V>, f: F) -> T
+    where
+        F: FnOnce(&mut StoreProxy, &mut V) -> T,
+    {
+        self.as_proxy().with_value(token, f)
+    }
+
+
+    pub fn as_proxy<'a>(&'a mut self) -> StoreProxy<'a> {
+        StoreProxy {
+            store: self,
+            borrowed: Vec::new(),
+        }
+    }
+}
+
+pub struct StoreProxy<'store> {
+    store: &'store mut Store,
+    borrowed: Vec<usize>,
+}
+
+impl<'store> StoreProxy<'store> {
+    /// Insert a new value in the proxified store
+    ///
+    /// Returns a clonable token that you can later use to access this
+    /// value.
+    pub fn insert<V: Any + 'static>(&mut self, value: V) -> Token<V> {
+        self.store.insert(value)
+    }
+
+    /// Access value previously inserted in the proxified store
+    ///
+    /// Panics if the provided token corresponds to a value that was removed, or
+    /// if this value is already borrowed.
+    pub fn get<V: Any + 'static>(&self, token: &Token<V>) -> &V {
+        if self.borrowed.contains(&token.id) {
+            panic!("Attempted to borrow twice the same value from the Store!");
+        }
+        self.store.get(token)
+    }
+
+    /// Mutably access value previously inserted in the proxified store
+    ///
+    /// Panics if the provided token corresponds to a value that was removed, or
+    /// if this value is already borrowed.
+    pub fn get_mut<V: Any + 'static>(&mut self, token: &Token<V>) -> &mut V {
+        if self.borrowed.contains(&token.id) {
+            panic!("Attempted to borrow twice the same value from the Store!");
+        }
+        self.store.get_mut(token)
+    }
+
+    /// Remove a value previously inserted in the proxified store
+    ///
+    /// Panics if the provided token corresponds to a value that was already
+    /// removed.
+    pub fn remove<V: Any + 'static>(&mut self, token: Token<V>) -> V {
+        if self.borrowed.contains(&token.id) {
+            panic!("Attempted to remove a value from the Store while it was borrowed!");
+        }
+        self.store.remove(token)
+    }
+
+    pub fn with_value<V: Any + 'static, T, F>(&mut self, token: &Token<V>, f: F) -> T
+    where
+        F: FnOnce(&mut StoreProxy, &mut V) -> T,
+    {
+        if self.borrowed.contains(&token.id) {
+            panic!("Attempted to borrow twice the same value from the Store!");
+        }
+        let value_ptr = { self.store.get_mut(token) as *mut V };
+        let value = unsafe { &mut *value_ptr };
+        let mut deeper_proxy = StoreProxy {
+            store: &mut *self.store,
+            borrowed: {
+                let mut my_borrowed = self.borrowed.clone();
+                my_borrowed.push(token.id);
+                my_borrowed
+            },
+        };
+        f(&mut deeper_proxy, value)
+    }
 }
 
 #[cfg(test)]
@@ -166,5 +249,24 @@ mod tests {
         let token = store.insert("I like trains");
         assert_eq!(store.values.len(), 1);
         assert_eq!(*store.get(&token), "I like trains");
+    }
+
+    #[test]
+    fn with_value_manipulate() {
+        let mut store = Store::new();
+        let token1 = store.insert("I like trains".to_owned());
+        let token2 = store.insert(42);
+        let len = store.with_value(&token1, |proxy, value1| {
+            *proxy.get_mut(&token2) += 10;
+            let token3 = proxy.with_value(&token2, |proxy, value2| {
+                *value2 *= 2;
+                proxy.insert(*value2 as f32 + 0.5)
+            });
+            let number = proxy.remove(token2);
+            value1.push_str(&format!(": {} = {}", number, proxy.get(&token3)));
+            value1.len()
+        });
+        assert_eq!(len, 26);
+        assert_eq!(store.get(&token1), "I like trains: 104 = 104.5");
     }
 }
