@@ -100,6 +100,16 @@ pub struct Token<V> {
     _type: PhantomData<V>,
 }
 
+impl<V> Token<V> {
+    /// Check wether this token is still valid
+    ///
+    /// If it is not, trying to use it to access contents
+    /// will panic.
+    pub fn valid(&self) -> bool {
+        self.live.get()
+    }
+}
+
 impl<V> Clone for Token<V> {
     fn clone(&self) -> Token<V> {
         Token {
@@ -459,4 +469,12 @@ mod tests {
         assert_eq!(*store.get(&token2), 42);
     }
 
+    #[test]
+    fn token_validity() {
+        let mut store = Store::new();
+        let token = store.insert(42);
+        assert!(token.valid());
+        store.remove(token.clone());
+        assert!(!token.valid());
+    }
 }
